@@ -32,7 +32,7 @@ use crate::eraftpb::{
 };
 use hashbrown::{HashMap, HashSet};
 use protobuf::Message as PbMessage;
-use rand::{self, Rng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use slog::{self, Logger};
 
 use super::errors::{Error, Result, StorageError};
@@ -212,6 +212,9 @@ pub struct Raft<T: Storage> {
 
     /// The logger for the raft structure.
     logger: slog::Logger,
+
+    /// Seeded RNG
+    rng: StdRng,
 }
 
 trait AssertSend: Send {}
@@ -282,6 +285,7 @@ impl<T: Storage> Raft<T> {
             tag: c.tag.to_owned(),
             batch_append: c.batch_append,
             logger,
+            rng: StdRng::seed_from_u64(c.seed),
         };
         for p in peers {
             let pr = Progress::new(1, r.max_inflight);
@@ -2523,7 +2527,7 @@ impl<T: Storage> Raft<T> {
     pub fn reset_randomized_election_timeout(&mut self) {
         let prev_timeout = self.randomized_election_timeout;
         let timeout =
-            rand::thread_rng().gen_range(self.min_election_timeout, self.max_election_timeout);
+            self.rng.gen_range(self.min_election_timeout, self.max_election_timeout);
         debug!(
             self.logger,
             "reset election timeout {prev_timeout} -> {timeout} at {election_elapsed}",
